@@ -159,6 +159,11 @@ Access from other devices using:
 Contributions are welcome!  
 Please submit a pull request or open an issue for any enhancements or bug fixes.
 
+## ⭐️ Support
+
+If you find this project helpful, please consider giving it a **star** on [GitHub](https://github.com/najibullahjafari/zkteco_device_python_connect)!  
+Your support helps others discover this project and motivates further development. Thank you! 🌟
+
 ## 📄 License
 
 This project is licensed under the MIT License. See the LICENSE file for more details.
