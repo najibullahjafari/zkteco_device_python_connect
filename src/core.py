@@ -14,7 +14,7 @@ def connect(
     comm_key: int = Query(None, description="Device Communication Key")
 ):
     # Set default values if not provided
-    ip = ip or "192.168.1.201"
+    ip = ip or "172.17.10.124"
     port = port or 4370
     comm_key = comm_key or 454545
 
@@ -64,6 +64,22 @@ def api_insert_user(user: UserCreate, conn=Depends(connect)):
             group_id=user.group_id,
             user_id=str(user.uid),
             card=None
+        )
+        return {"status": "success" if result else "failed"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/users/fake")
+def api_add_fake_user(conn=Depends(connect)):
+    try:
+
+        # Try a very simple, unique user
+        result = conn.set_user(
+            uid=666,           # Use a unique, small integer not already on device
+            name="A",        # Short ASCII name
+            privilege=0,     # 0: User
+            user_id="666"      # Short string, same as uid
         )
         return {"status": "success" if result else "failed"}
     except Exception as e:
@@ -124,18 +140,20 @@ def api_get_attendance(
 @router.get("/attendance")
 def api_get_all_attendance(conn=Depends(connect)):
     """
-    Get all attendance logs for all users.
+    Get all attendance logs for all users after 2024.
     """
     try:
         attendance = conn.get_attendance()
-        return [
-            {
-                "user_id": att.user_id,
-                "timestamp": att.timestamp,
-                "status": att.status
-            }
-            for att in attendance
-        ]
+        result = []
+        for att in attendance:
+            att_date = getattr(att.timestamp, "date", lambda: None)()
+            if att_date and att_date.year >= 2025:
+                result.append({
+                    "user_id": att.user_id,
+                    "timestamp": att.timestamp,
+                    "status": att.status
+                })
+        return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -178,6 +196,50 @@ def api_get_past_month_attendance(conn=Depends(connect)):
                     "timestamp": att.timestamp,
                     "status": att.status
                 })
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/attendance/by_month")
+def api_get_attendance_by_month(
+    year: int = Query(..., description="Year, e.g. 2024"),
+    month: int = Query(..., description="Month, 1-12"),
+    conn=Depends(connect)
+):
+    """
+    Get all attendance logs for a specific month and year.
+    Example: /attendance/by_month?year=2020&month=6
+    """
+    try:
+        result = []
+        for att in conn.get_attendance():
+            att_date = getattr(att.timestamp, "date", lambda: None)()
+            if att_date and att_date.year == year and att_date.month == month:
+                result.append({
+                    "user_id": att.user_id,
+                    "timestamp": att.timestamp,
+                    "status": att.status
+                })
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/attendance/all")
+def api_get_all_attendance_logs(conn=Depends(connect)):
+    """
+    Return all attendance logs for all users.
+    """
+    try:
+        attendance = conn.get_attendance()
+        result = []
+        for att in attendance:
+            result.append({
+                "user_id": att.user_id,
+                "timestamp": att.timestamp,
+                "status": att.status
+            })
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
