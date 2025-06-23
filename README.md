@@ -1,8 +1,8 @@
-# 📚 Device API Documentation
+# 📚 Documentation
 
 ## 🚀 Overview
 
-The Device API project provides a RESTful interface for connecting to ZKTeco-compatible biometric devices, retrieving user data, and accessing attendance logs.  
+The Device API project provides a RESTful interface for connecting to ZKTeco-compatible biometric devices to your applications like MIS, LMS, HR ... for retrieving user data, and accessing attendance logs. no matter which language you use by using this package you can access via API endpoint to your attendance machine.
 It is designed to simplify device integration for attendance and access control systems and facilitate interaction with the device through a RESTful API.
 
 ## 🗂️ Project Structure
