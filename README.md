@@ -13,15 +13,15 @@ It is designed to simplify device integration for attendance and access control 
 ```
 device-api
 ├── src
-│   ├── core.py          # Core functionality for device connectivity
+│   ├── core.py          
 │   ├── api
-│   │   ├── __init__.py  # Initializes the API module
-│   │   └── endpoints.py # Defines API endpoints for user data and attendance logs
-│   ├── main.py          # Entry point for the application
+│   │   ├── __init__.py  
+│   │   └── endpoints.py 
+│   ├── main.py          
 │   └── utils
-│       └── device.py    # Utility functions related to device operations
-├── requirements.txt     # Lists project dependencies
-└── README.md            # Project documentation
+│       └── device.py    
+├── requirements.txt     
+└── README.md          
 ```
 
 ## 🛠️ Prerequisites
