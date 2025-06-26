@@ -67,7 +67,7 @@ device-api
    ```
 
 2. **Access the API endpoints:**
-   - Retrieve user data: `GET /api/users`
+   - Retrieve user data: `GET /api/users` it will retrive all users of zkteco device.
    - Retrieve attendance logs: `GET /api/attendance`
 
 ## ⚙️ Configuration
