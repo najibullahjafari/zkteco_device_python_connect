@@ -1,38 +1,27 @@
 from fastapi import Depends, APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from datetime import date, timedelta
-from typing import List
+from typing import List, Dict, Any
 from zk import ZK
 from datetime import datetime
+import logging
+logging.basicConfig(level=logging.DEBUG)
 
 router = APIRouter()
 
 
 def connect(
-    ip: str = Query(None, description="Device IP"),
-    port: int = Query(None, description="Device Port"),
-    comm_key: int = Query(None, description="Device Communication Key")
+    ip: str = Query("103.227.17.70", description="Device IP"),
+    port: int = Query(4370, description="Device Port"),
+    comm_key: int = Query(454545, description="Device Communication Key")
 ):
-    # Set default values if not provided
-    ip = ip or "172.17.10.124"
-    port = port or 4370
-    comm_key = comm_key or 454545
-
     zk = ZK(ip, port=port, timeout=5, password=comm_key,
-            force_udp=True, ommit_ping=True)
+            force_udp=False, ommit_ping=False)  # Updated values
     conn = zk.connect()
     try:
         yield conn
     finally:
         conn.disconnect()
-
-
-def get_users(conn):
-    return conn.get_users()
-
-
-def get_attendance(conn):
-    return conn.get_attendance()
 
 
 class UserCreate(BaseModel):
@@ -45,298 +34,326 @@ class UserCreate(BaseModel):
 
 
 @router.get("/users")
-def api_get_users(conn=Depends(connect)):
+def api_get_users(
+    ip: str = Query("103.227.17.70", description="Device IP"),
+    port: int = Query(4370, description="Device Port"),
+    comm_key: int = Query(454545, description="Device Communication Key")
+):
     try:
-        users = get_users(conn)
-        return [{"uid": u.uid, "name": u.name, "privilege": u.privilege, "user_id": u.user_id} for u in users]
+        zk = ZK(ip, port=port, timeout=5, password=comm_key,
+                force_udp=False, ommit_ping=False)  # Updated values
+        conn = zk.connect()
+        try:
+            users = conn.get_users()
+            return [{"uid": u.uid, "name": u.name, "privilege": u.privilege, "user_id": u.user_id} for u in users]
+        finally:
+            conn.disconnect()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/users")
-def api_insert_user(user: UserCreate, conn=Depends(connect)):
+def api_insert_user(
+    user: UserCreate,
+    ip: str = Query("103.227.17.70", description="Device IP"),
+    port: int = Query(4370, description="Device Port"),
+    comm_key: int = Query(454545, description="Device Communication Key")
+):
     try:
-        result = conn.set_user(
-            uid=user.uid,
-            name=user.name,
-            privilege=user.privilege,
-            password=user.password,
-            group_id=user.group_id,
-            user_id=str(user.uid),
-            card=None
-        )
-        return {"status": "success" if result else "failed"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        zk = ZK(ip, port=port, timeout=5, password=comm_key,
+                force_udp=False, ommit_ping=False)
+        conn = zk.connect()
+        try:
+            uid = user.uid
+            # prefer explicit user_id if provided, otherwise fall back to uid
+            user_id = user.user_id if user.user_id else str(uid)
+            # set_user expects group_id as string for some firmwares, and int for others;
+            # sending it as string is safe (the method handles conversion where needed)
+            group_id = str(user.group_id) if user.group_id is not None else ""
+            card = 0
 
-
-@router.post("/users/fake")
-def api_add_fake_user(conn=Depends(connect)):
-    try:
-
-        # Try a very simple, unique user
-        result = conn.set_user(
-            uid=666,           # Use a unique, small integer not already on device
-            name="A",        # Short ASCII name
-            privilege=0,     # 0: User
-            user_id="666"      # Short string, same as uid
-        )
-        return {"status": "success" if result else "failed"}
+            result = conn.set_user(
+                uid=uid,
+                name=user.name,
+                privilege=user.privilege,
+                password=user.password,
+                group_id=group_id,
+                user_id=user_id,
+                card=card
+            )
+            return {"status": "success" if result else "failed"}
+        finally:
+            conn.disconnect()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.delete("/users/{uid}")
-def api_delete_user(uid: int, conn=Depends(connect)):
-    try:
-        conn.delete_user(uid)
-        return {"status": "deleted"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.put("/users/{uid}")
-def api_edit_user(uid: int, user: UserCreate, conn=Depends(connect)):
-    try:
-        result = conn.set_user(
-            uid=uid,
-            name=user.name,
-            privilege=user.privilege,
-            password=user.password,
-            group_id=user.group_id,
-            user_id=str(uid),
-            card=None
-        )
-        return {"status": "success" if result else "failed"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/attendance/{user_id}")
-def api_get_attendance(
-    user_id: str,
-    day: date = Query(None, description="Date in YYYY-MM-DD format"),
-    conn=Depends(connect)
+def api_delete_user(
+    uid: int,
+    ip: str = Query("103.227.17.70", description="Device IP"),
+    port: int = Query(4370, description="Device Port"),
+    comm_key: int = Query(454545, description="Device Communication Key")
 ):
-    """
-    Get attendance logs for a specific user and time.
-    Example: /attendance/1?day=2024-06-20
-    """
     try:
-        result = []
-        for att in conn.get_attendance():
-            if att.user_id == user_id:
-                if day is None or getattr(att.timestamp, "date", lambda: None)() == day:
-                    result.append({
-                        "user_id": att.user_id,
-                        "timestamp": att.timestamp,
-                        "status": att.status
-                    })
-        return result
+        zk = ZK(ip, port=port, timeout=5, password=comm_key,
+                force_udp=False, ommit_ping=False)  # Updated values
+        conn = zk.connect()
+        try:
+            conn.delete_user(uid)
+            return {"status": "deleted"}
+        finally:
+            conn.disconnect()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/attendance")
-def api_get_all_attendance(conn=Depends(connect)):
-    """
-    Get all attendance logs for all users after 2024.
-    """
-    try:
-        attendance = conn.get_attendance()
-        result = []
-        for att in attendance:
-            att_date = getattr(att.timestamp, "date", lambda: None)()
-            if att_date and att_date.year >= 2025:
-                result.append({
-                    "user_id": att.user_id,
-                    "timestamp": att.timestamp,
-                    "status": att.status
-                })
-        return result
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/attendance/today")
-def api_get_today_attendance(conn=Depends(connect)):
-    """
-    Get all attendance logs for today.
-    """
-    try:
-        today = datetime.now().date()
-        result = []
-        for att in conn.get_attendance():
-            if getattr(att.timestamp, "date", lambda: None)() == today:
-                result.append({
-                    "user_id": att.user_id,
-                    "timestamp": att.timestamp,
-                    "status": att.status
-                })
-        return result
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/attendance/month")
-def api_get_past_month_attendance(conn=Depends(connect)):
-    """
-    Get all attendance logs for the past month.
-    """
-    try:
-        today = datetime.now().date()
-        first_day_last_month = (today.replace(
-            day=1) - timedelta(days=1)).replace(day=1)
-        result = []
-        for att in conn.get_attendance():
-            att_date = getattr(att.timestamp, "date", lambda: None)()
-            if att_date and first_day_last_month <= att_date <= today:
-                result.append({
-                    "user_id": att.user_id,
-                    "timestamp": att.timestamp,
-                    "status": att.status
-                })
-        return result
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/attendance/by_month")
-def api_get_attendance_by_month(
-    year: int = Query(..., description="Year, e.g. 2024"),
-    month: int = Query(..., description="Month, 1-12"),
-    conn=Depends(connect)
+def api_get_all_attendance(
+    ip: str = Query("103.227.17.70", description="Device IP"),
+    port: int = Query(4370, description="Device Port"),
+    comm_key: int = Query(454545, description="Device Communication Key")
 ):
-    """
-    Get all attendance logs for a specific month and year.
-    Example: /attendance/by_month?year=2020&month=6
-    """
     try:
-        result = []
-        for att in conn.get_attendance():
-            att_date = getattr(att.timestamp, "date", lambda: None)()
-            if att_date and att_date.year == year and att_date.month == month:
+        zk = ZK(ip, port=port, timeout=5, password=comm_key,
+                force_udp=False, ommit_ping=False)  # Updated values
+        conn = zk.connect()
+        try:
+            attendance = conn.get_attendance()
+            result = []
+            for att in attendance:
                 result.append({
                     "user_id": att.user_id,
                     "timestamp": att.timestamp,
                     "status": att.status
                 })
-        return result
+            return result
+        finally:
+            conn.disconnect()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/attendance/all")
-def api_get_all_attendance_logs(conn=Depends(connect)):
-    """
-    Return all attendance logs for all users.
-    """
+@router.get("/device/memory/size")
+def get_memory_size(
+    ip: str = Query("103.227.17.70", description="Device IP"),
+    port: int = Query(4370, description="Device Port"),
+    comm_key: int = Query(454545, description="Device Communication Key")
+):
     try:
-        attendance = conn.get_attendance()
-        result = []
-        for att in attendance:
-            result.append({
-                "user_id": att.user_id,
-                "timestamp": att.timestamp,
-                "status": att.status
-            })
-        return result
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/device/time")
-def api_get_device_time(conn=Depends(connect)):
-    try:
-        device_time = conn.get_time()
-        return {"device_time": device_time}
+        zk = ZK(ip, port=port, timeout=5, password=comm_key,
+                force_udp=False, ommit_ping=False)  # Updated values
+        conn = zk.connect()
+        try:
+            memory_size = conn.read_sizes()
+            return {"memory_size": memory_size}
+        finally:
+            conn.disconnect()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/device/info")
-def api_get_device_info(conn=Depends(connect)):
+def api_get_device_info(
+    ip: str = Query("103.227.17.70", description="Device IP"),
+    port: int = Query(4370, description="Device Port"),
+    comm_key: int = Query(454545, description="Device Communication Key")
+):
     try:
-        info = conn.get_device_info()
-        return info
+        zk = ZK(ip, port=port, timeout=5, password=comm_key,
+                force_udp=False, ommit_ping=False)  # Updated values
+        conn = zk.connect()
+        try:
+            info = {}
+            # list of (key, method_name) to call on the connection
+            methods = [
+                ("device_name", "get_device_name"),
+                ("firmware_version", "get_firmware_version"),
+                ("serial_number", "get_serialnumber"),
+                ("platform", "get_platform"),
+                ("mac", "get_mac"),
+                ("face_version", "get_face_version"),
+                ("fp_version", "get_fp_version"),
+            ]
+
+            for key, method_name in methods:
+                fn = getattr(conn, method_name, None)
+                if callable(fn):
+                    try:
+                        info[key] = fn()
+                    except Exception:
+                        info[key] = None
+                else:
+                    info[key] = None
+            return info
+        finally:
+            conn.disconnect()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/user/photo/{user_id}")
-def api_get_user_photo(user_id: str, conn=Depends(connect)):
+@router.get("/device/restart")
+def restart_device(
+    ip: str = Query("103.227.17.70", description="Device IP"),
+    port: int = Query(4370, description="Device Port"),
+    comm_key: int = Query(454545, description="Device Communication Key")
+):
+    """
+    Restart the device.
+    """
     try:
-        photo = conn.get_user_photo(user_id)
-        if photo:
-            return {"user_id": user_id, "photo": photo}
-        else:
-            raise HTTPException(status_code=404, detail="Photo not found")
+        zk = ZK(ip, port=port, timeout=5, password=comm_key,
+                force_udp=False, ommit_ping=False)
+        conn = zk.connect()
+        try:
+            result = conn.restart()
+            return {"status": "success" if result else "failed"}
+        finally:
+            conn.disconnect()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/device/voice_test")
-def api_test_voice(conn=Depends(connect)):
+@router.get("/device/time")
+def get_device_time(
+    ip: str = Query("103.227.17.70", description="Device IP"),
+    port: int = Query(4370, description="Device Port"),
+    comm_key: int = Query(454545, description="Device Communication Key")
+):
+    """
+    Get the current time of the device.
+    """
     try:
-        conn.test_voice()
-        return {"status": "voice test triggered"}
+        zk = ZK(ip, port=port, timeout=5, password=comm_key,
+                force_udp=False, ommit_ping=False)
+        conn = zk.connect()
+        try:
+            device_time = conn.get_time()
+            return {"device_time": device_time}
+        finally:
+            conn.disconnect()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/device/users_count")
-def api_get_users_count(conn=Depends(connect)):
+@router.post("/device/time")
+def set_device_time(
+    timestamp: datetime,
+    ip: str = Query("103.227.17.70", description="Device IP"),
+    port: int = Query(4370, description="Device Port"),
+    comm_key: int = Query(454545, description="Device Communication Key")
+):
+    """
+    Set the current time of the device.
+    """
     try:
-        users = conn.get_users()
-        return {"users_count": len(users)}
+        zk = ZK(ip, port=port, timeout=5, password=comm_key,
+                force_udp=False, ommit_ping=False)
+        conn = zk.connect()
+        try:
+            result = conn.set_time(timestamp)
+            return {"status": "success" if result else "failed"}
+        finally:
+            conn.disconnect()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/device/logs_count")
-def api_get_logs_count(conn=Depends(connect)):
+@router.get("/device/network")
+def get_network_params(
+    ip: str = Query("103.227.17.70", description="Device IP"),
+    port: int = Query(4370, description="Device Port"),
+    comm_key: int = Query(454545, description="Device Communication Key")
+):
+    """
+    Get the network parameters of the device.
+    """
     try:
-        logs = conn.get_attendance()
-        return {"logs_count": len(logs)}
+        zk = ZK(ip, port=port, timeout=5, password=comm_key,
+                force_udp=False, ommit_ping=False)
+        conn = zk.connect()
+        try:
+            network_params = conn.get_network_params()
+            return network_params
+        finally:
+            conn.disconnect()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-class UnlockRequest(BaseModel):
-    time: int = 3
+@router.get("/device/memory")
+def get_memory_usage(
+    ip: str = Query("103.227.17.70", description="Device IP"),
+    port: int = Query(4370, description="Device Port"),
+    comm_key: int = Query(454545, description="Device Communication Key")
+):
+    """
+    Get memory usage details of the device.
+    """
+    try:
+        zk = ZK(ip, port=port, timeout=5, password=comm_key,
+                force_udp=False, ommit_ping=False)
+        conn = zk.connect()
+        try:
+            conn.read_sizes()
+            return {
+                "users": conn.users,
+                "fingers": conn.fingers,
+                "records": conn.records,
+                "faces": conn.faces,
+                "users_capacity": conn.users_cap,
+                "fingers_capacity": conn.fingers_cap,
+                "records_capacity": conn.rec_cap,
+                "faces_capacity": conn.faces_cap,
+            }
+        finally:
+            conn.disconnect()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/device/unlock")
-def api_unlock(request: UnlockRequest, conn=Depends(connect)):
+def unlock_door(
+    time: int = Query(3, description="Unlock duration in seconds"),
+    ip: str = Query("103.227.17.70", description="Device IP"),
+    port: int = Query(4370, description="Device Port"),
+    comm_key: int = Query(454545, description="Device Communication Key")
+):
     """
-    Unlock the door for a specified time (seconds).
+    Unlock the door for a specified duration.
     """
     try:
-        result = conn.unlock(request.time)
-        return {"status": "success" if result else "failed"}
+        zk = ZK(ip, port=port, timeout=5, password=comm_key,
+                force_udp=False, ommit_ping=False)
+        conn = zk.connect()
+        try:
+            result = conn.unlock(time)
+            return {"status": "success" if result else "failed"}
+        finally:
+            conn.disconnect()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/device/unlock")
-def api_unlock_get(time: int = 3, conn=Depends(connect)):
+@router.post("/device/test-voice")
+def api_test_voice(
+    voice_id: int = Query(1, description="Voice index/ID to play"),
+    ip: str = Query("103.227.17.70", description="Device IP"),
+    port: int = Query(4370, description="Device Port"),
+    comm_key: int = Query(454545, description="Device Communication Key")
+):
     """
-    Unlock the door for a specified time (seconds) via GET request.
-    """
-    try:
-        result = conn.unlock(time)
-        return {"status": "success" if result else "failed"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/device/verify_user")
-def api_verify_user(conn=Depends(connect)):
-    """
-    Start verify finger mode (after capture).
+    Play a test voice on the device.
+    Example: /device/test-voice?voice_id=0
     """
     try:
-        result = conn.verify_user()
-        return {"status": "success" if result else "failed"}
+        zk = ZK(ip, port=port, timeout=5, password=comm_key,
+                force_udp=False, ommit_ping=False)
+        conn = zk.connect()
+        try:
+            result = conn.test_voice(voice_id)
+            return {"status": "success" if result else "failed", "voice_id": voice_id}
+        finally:
+            conn.disconnect()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
