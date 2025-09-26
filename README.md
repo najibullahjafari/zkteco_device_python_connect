@@ -7,6 +7,7 @@ The Device API project provides a RESTful interface for connecting ZKTeco-compat
 No matter which programming language you use! With this package, you can interact with your attendance machine via API endpoints—whether you're using PHP (Laravel), Python, Ruby, Next.js, NestJS, React, or others.
 
 It is designed to simplify device integration for attendance and access control systems and to facilitate seamless interaction with the device through a RESTful API.
+But after using this as api in server I realized that it could be a good and easy way to use the python code inside the php code. The key is to install the python in server and use php to run the python code in terminal to get data from attendance machine.
 
 ## 🗂️ Project Structure
 
